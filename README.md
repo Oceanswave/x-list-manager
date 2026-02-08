@@ -113,4 +113,4 @@ We welcome contributions! Please follow these guidelines:
 
 ## License
 
-MIT © 2026 Barista Labs
+MIT © 2026 Sean McLellan

@@ -7,7 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "Barista Labs",
+  "author": "Sean McLellan",
   "license": "MIT",
   "repository": {
     "type": "git",
