@@ -6,3 +6,8 @@ debug-*.ts
 accounts_to_add.json
 .DS_Store
 .env
+
+# Local auth data
+auth-data/
+auth-data-seeded/
+test-persistent*.ts
