@@ -4,7 +4,8 @@
   "description": "CLI to manage X/Twitter lists using Playwright and Chrome cookies",
   "main": "scripts/cli.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "Sean McLellan",
@@ -21,9 +22,10 @@
     "playwright": "^1.58.2"
   },
   "devDependencies": {
-    "@types/node": "^25.2.1",
+    "@types/node": "^25.2.2",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   },
   "engines": {
     "node": ">=22.0.0"
