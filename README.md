@@ -2,6 +2,23 @@
 
 A CLI tool to manage X (Twitter) lists using Playwright and Chrome cookies. Automate adding and removing users from your lists without needing an expensive API key.
 
+## Designed for Autonomous Agents
+
+x-list-manager is built to be used as a skill by AI agents (OpenClaw, Claude Code, etc.) for automated X/Twitter list management. It:
+
+- **Runs headlessly** by default (no GUI needed)
+- **Uses existing cookies** (no manual login flow)
+- **Provides clear CLI output** for agent parsing
+- **Handles edge cases gracefully** (user not found, already in list, etc.)
+- **Follows standard skill patterns** (SKILL.md, SPEC.md, TASKS.md)
+
+Agents can invoke it via:
+```bash
+npx tsx scripts/cli.ts add "List Name" @handle1 @handle2
+```
+
+Or use it programmatically for batch operations with JSON input.
+
 ## Features
 
 - **No API Key Required**: Uses your existing browser session.
@@ -45,12 +62,12 @@ The tool uses `browser-cookie3` to extract your X.com cookies from Chrome. Make 
 **Refresh cookies:**
 If your session expires or it's your first run:
 ```bash
-npx tsx cli.ts refresh
+npx tsx scripts/cli.ts refresh
 ```
 
 **Check login status:**
 ```bash
-npx tsx cli.ts check
+npx tsx scripts/cli.ts check
 ```
 
 ### Managing Lists
@@ -58,7 +75,7 @@ npx tsx cli.ts check
 **Add users to a list:**
 ```bash
 # Usage: add "List Name" @handle1 @handle2 ...
-npx tsx cli.ts add "AI News" @OpenAI @AnthropicAI
+npx tsx scripts/cli.ts add "AI News" @OpenAI @AnthropicAI
 ```
 
 **Batch add from JSON:**
@@ -72,17 +89,17 @@ Create a file `accounts.json`:
 
 Run:
 ```bash
-npx tsx cli.ts batch accounts.json
+npx tsx scripts/cli.ts batch accounts.json
 ```
 
 **Remove a user:**
 ```bash
-npx tsx cli.ts remove @handle "List Name"
+npx tsx scripts/cli.ts remove @handle "List Name"
 ```
 
 **View your lists:**
 ```bash
-npx tsx cli.ts list
+npx tsx scripts/cli.ts list
 ```
 
 ## Contributing
