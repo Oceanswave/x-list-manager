@@ -11,3 +11,6 @@ accounts_to_add.json
 auth-data/
 auth-data-seeded/
 test-persistent*.ts
+auth.json
+auth-data/
+auth-data-seeded/

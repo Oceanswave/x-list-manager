@@ -3,12 +3,10 @@ import { Command } from 'commander';
 import { chromium, BrowserContext, Page, Cookie } from 'playwright';
 import fs from 'fs';
 import path from 'path';
+import { getXCookies } from './lib/cookies.js';
 
 const program = new Command();
 const AUTH_FILE = path.join(process.cwd(), 'auth.json');
-
-// Use Python script with browser-cookie3 for robust cookie extraction
-import { execSync } from 'child_process';
 
 program
   .name('x-list-manager')
@@ -21,35 +19,45 @@ interface BrowserSession {
   page: Page;
 }
 
-// Extract cookies using browser-cookie3 via Python
+// Extract cookies using @steipete/sweet-cookie (pure TypeScript)
 async function extractChromeCookies(): Promise<Cookie[]> {
-  console.log('Extracting cookies from Chrome using browser-cookie3 (Python)...');
+  console.log('Extracting cookies from Chrome using sweet-cookie...');
   
-  const pythonScript = path.join(__dirname, 'get_cookies.py');
-  const venvPython = path.join(process.cwd(), '.venv/bin/python3');
-  
-  // Use venv python if available, otherwise fallback to system python
-  const pythonCmd = fs.existsSync(venvPython) ? venvPython : 'python3';
-
   try {
-      const output = execSync(`${pythonCmd} ${pythonScript}`, { encoding: 'utf-8' });
-      const rawCookies = JSON.parse(output.trim());
+      const xCookies = await getXCookies();
       
-      const cookies: Cookie[] = rawCookies.map((c: any) => ({
-          name: c.name,
-          value: c.value,
-          domain: c.domain,
-          path: c.path,
-          expires: c.expires || -1,
-          httpOnly: c.httpOnly || false,
-          secure: c.secure || false,
-          sameSite: 'Lax' // Default
-      }));
+      if (!xCookies.auth_token || !xCookies.ct0) {
+          console.warn('Missing required cookies (auth_token or ct0)');
+          return [];
+      }
+      
+      const cookies: Cookie[] = [
+          {
+              name: 'auth_token',
+              value: xCookies.auth_token,
+              domain: '.x.com',
+              path: '/',
+              expires: -1,
+              httpOnly: true,
+              secure: true,
+              sameSite: 'Lax'
+          },
+          {
+              name: 'ct0',
+              value: xCookies.ct0,
+              domain: '.x.com',
+              path: '/',
+              expires: -1,
+              httpOnly: false,
+              secure: true,
+              sameSite: 'Lax'
+          }
+      ];
       
       console.log(`Found ${cookies.length} cookies for X/Twitter`);
       return cookies;
   } catch (error) {
-      console.error('Failed to run python script:', error);
+      console.error('Failed to extract cookies:', error);
       return [];
   }
 }
