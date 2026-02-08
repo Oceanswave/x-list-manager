@@ -2,7 +2,7 @@
   "name": "x-list-manager",
   "version": "1.0.0",
   "description": "CLI to manage X/Twitter lists using Playwright and Chrome cookies",
-  "main": "cli.ts",
+  "main": "scripts/cli.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },

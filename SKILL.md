@@ -1,3 +1,9 @@
+---
+name: x-list-manager
+description: Manage X/Twitter lists via Playwright and Chrome cookies. Add, remove, and batch-manage list memberships using your existing Chrome session.
+argument-hint: 'add "AI Announcements" @elonmusk, remove @handle "List Name", batch accounts.json'
+---
+
 # X List Manager (x-list-manager)
 
 A simple TypeScript CLI for managing X (Twitter) lists using Playwright and Chrome cookies.
@@ -29,24 +35,24 @@ This tool uses cookies from your Chrome browser. Log in to X.com in Chrome first
 
 **Check status:**
 ```bash
-npx tsx cli.ts check
+npx tsx scripts/cli.ts check
 ```
 
 **Refresh cookies (if expired):**
 ```bash
-npx tsx cli.ts refresh
+npx tsx scripts/cli.ts refresh
 ```
 
 ### 3. Managing Lists
 
 **Add users to a list:**
 ```bash
-npx tsx cli.ts add "Tech Leaders" @elonmusk @jack
+npx tsx scripts/cli.ts add "Tech Leaders" @elonmusk @jack
 ```
 
 **Remove a user from a list:**
 ```bash
-npx tsx cli.ts remove @elonmusk "Tech Leaders"
+npx tsx scripts/cli.ts remove @elonmusk "Tech Leaders"
 ```
 
 **Batch add users from a JSON file:**
@@ -60,12 +66,12 @@ Create a JSON file (e.g., `accounts.json`):
 
 Run:
 ```bash
-npx tsx cli.ts batch accounts.json
+npx tsx scripts/cli.ts batch accounts.json
 ```
 
 **List your lists:**
 ```bash
-npx tsx cli.ts list
+npx tsx scripts/cli.ts list
 ```
 
 ## Options
@@ -75,6 +81,6 @@ npx tsx cli.ts list
 
 ## Troubleshooting
 
-- If authentication fails, run `npx tsx cli.ts refresh`.
+- If authentication fails, run `npx tsx scripts/cli.ts refresh`.
 - Ensure you are logged into X.com in Chrome.
 - If selectors change on X.com, the tool may need updates.

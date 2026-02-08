@@ -25,7 +25,7 @@ interface BrowserSession {
 async function extractChromeCookies(): Promise<Cookie[]> {
   console.log('Extracting cookies from Chrome using browser-cookie3 (Python)...');
   
-  const pythonScript = path.join(process.cwd(), 'get_cookies.py');
+  const pythonScript = path.join(__dirname, 'get_cookies.py');
   const venvPython = path.join(process.cwd(), '.venv/bin/python3');
   
   // Use venv python if available, otherwise fallback to system python
