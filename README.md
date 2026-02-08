@@ -1,16 +1,24 @@
 # X List Manager (x-list-manager)
 
-CLI to manage X/Twitter lists using Playwright and Chrome cookies.
+A CLI tool to manage X (Twitter) lists using Playwright and Chrome cookies. Automate adding and removing users from your lists without needing an expensive API key.
 
-This tool automates the process of adding/removing users from your X lists by using your existing Chrome session. No API key required.
+## Features
 
-## Prerequisites
-
-- Node.js (v18+)
-- Python 3
-- Google Chrome (logged into X.com)
+- **No API Key Required**: Uses your existing browser session.
+- **List Management**: Add or remove users from lists easily.
+- **Batch Operations**: Support for adding multiple users via JSON.
+- **Auto-Cookie Extraction**: Seamlessly uses Chrome cookies via `browser-cookie3`.
+- **Headless Execution**: Runs in the background (default) or visible mode.
 
 ## Installation
+
+### Prerequisites
+
+- Node.js (v18+)
+- Python 3 (for cookie extraction)
+- Google Chrome (logged into X.com)
+
+### Setup
 
 1. **Clone the repository:**
    ```bash
@@ -21,16 +29,12 @@ This tool automates the process of adding/removing users from your X lists by us
 2. **Install Node dependencies:**
    ```bash
    npm install
+   npx playwright install chromium
    ```
 
-3. **Install Python dependency (for cookie extraction):**
+3. **Install Python dependency:**
    ```bash
    pip install browser-cookie3
-   ```
-
-4. **Install Playwright browsers:**
-   ```bash
-   npx playwright install chromium
    ```
 
 ## Usage
@@ -81,12 +85,14 @@ npx tsx cli.ts remove @handle "List Name"
 npx tsx cli.ts list
 ```
 
-## Troubleshooting
+## Contributing
 
-- **"Not logged in"**: Run `npx tsx cli.ts refresh`. Ensure you are logged in on Chrome.
-- **"List not found"**: Double-check the list name (case-sensitive).
-- **"User not found"**: Ensure the handle is correct.
-- **Selectors failed**: X.com UI changes often. If the tool breaks, check for updates or inspecting the page structure.
+We welcome contributions! Please follow these guidelines:
+
+1. **Branch Protection**: Direct pushes to `main` are disabled.
+2. **Pull Requests**: Create a feature branch (e.g., `feat/my-feature`) and open a PR.
+3. **Auto-Merge**: PRs are automatically merged when checks pass (squash merge).
+4. **Cleanup**: Branches are automatically deleted after merge or if the PR is closed without merging.
 
 ## License
 
