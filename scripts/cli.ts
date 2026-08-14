@@ -1,96 +1,59 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { chromium, BrowserContext, Page, Cookie } from 'playwright';
-import fs from 'fs';
-import path from 'path';
-import { getXCookies } from './lib/cookies.js';
+import { chromium, BrowserContext, Page } from 'playwright';
+import fs from 'node:fs';
 
 const program = new Command();
-const AUTH_FILE = path.join(process.cwd(), 'auth.json');
+
+// Attach to the LIVE system Chromium via CDP (same pattern as
+// x-publisher.py in ~/av/bin/hydra/publish). No cookie extraction, no
+// separate browser instance -- the X login state is the real browser
+// session. Chromium must be running with --remote-debugging-port=9222:
+//   open -a Chromium --args --remote-debugging-port=9222 --no-first-run
+// Override the CDP endpoint with XLM_CDP_URL.
+const CDP_URL = process.env.XLM_CDP_URL || 'http://localhost:9222';
 
 program
   .name('x-list-manager')
-  .description('CLI to manage X/Twitter lists using your Chrome cookies')
+  .description('CLI to manage X/Twitter lists via live Chromium CDP')
   .version('1.0.0');
 
 interface BrowserSession {
-  browser: any;
+  browser: import('playwright').Browser;
   context: BrowserContext;
   page: Page;
 }
 
-// Extract cookies using @steipete/sweet-cookie (pure TypeScript)
-async function extractChromeCookies(): Promise<Cookie[]> {
-  console.log('Extracting cookies from Chrome using sweet-cookie...');
-  
-  try {
-      const xCookies = await getXCookies();
-      
-      if (!xCookies.auth_token || !xCookies.ct0) {
-          console.warn('Missing required cookies (auth_token or ct0)');
-          return [];
-      }
-      
-      const cookies: Cookie[] = [
-          {
-              name: 'auth_token',
-              value: xCookies.auth_token,
-              domain: '.x.com',
-              path: '/',
-              expires: -1,
-              httpOnly: true,
-              secure: true,
-              sameSite: 'Lax'
-          },
-          {
-              name: 'ct0',
-              value: xCookies.ct0,
-              domain: '.x.com',
-              path: '/',
-              expires: -1,
-              httpOnly: false,
-              secure: true,
-              sameSite: 'Lax'
-          }
-      ];
-      
-      console.log(`Found ${cookies.length} cookies for X/Twitter`);
-      return cookies;
-  } catch (error) {
-      console.error('Failed to extract cookies:', error);
-      return [];
-  }
-}
-
 async function getContext(headless: boolean = true): Promise<BrowserSession> {
-  const browser = await chromium.launch({ headless });
-  const context = await browser.newContext();
-  
-  // Try to load saved auth or extract from Chrome
-  if (fs.existsSync(AUTH_FILE)) {
-    // console.log('Loading saved auth state...');
-    const state = JSON.parse(fs.readFileSync(AUTH_FILE, 'utf-8'));
-    await context.addCookies(state.cookies || []);
-  } else {
-    // Extract cookies from Chrome
-    const cookies = await extractChromeCookies();
-    if (cookies.length === 0) {
-        console.warn("No cookies found! You might need to log in to X in Chrome first.");
-    }
-    await context.addCookies(cookies);
-    
-    // Save for future runs
-    const state = { cookies };
-    fs.writeFileSync(AUTH_FILE, JSON.stringify(state, null, 2));
-    console.log('Saved cookies to auth.json');
-  }
-  
+  const browser = await chromium.connectOverCDP(CDP_URL);
+  // Use the profile-bound context (has the persisted X session cookies).
+  // A fresh newContext() has NO cookies -- it does not inherit the profile.
+  const context = browser.contexts()[0] || await browser.newContext();
+  // Always create a FRESH page. Reusing an existing page risks
+  // "navigation interrupted by another navigation" -- a leftover page from a
+  // killed run may still be navigating, and SPA routing on X fights a goto.
+  // A new page in the SAME context inherits the session cookies.
   const page = await context.newPage();
   return { browser, context, page };
 }
 
 async function closeSession(session: BrowserSession) {
+  // Close the tab we created, then detach the CDP connection WITHOUT closing
+  // the user's live Chromium. browser.close() on a connectOverCDP browser
+  // only disconnects the websocket; it does NOT terminate the browser
+  // process. Required so the Node process exits (otherwise the open
+  // websocket keeps it alive).
+  try { await session.page.close(); } catch { /* already closed */ }
   await session.browser.close();
+}
+
+// Human-like pacing. Fixed computer-speed delays are a bot-detection
+// pattern; X watches for uniform action cadence. All waits are random
+// within a range so the pattern is non-uniform, like a real person
+// reading profiles, hesitating, and clicking.
+function humanDelay(page: Page, minMs: number, maxMs: number): Promise<void> {
+  const ms = minMs + Math.floor(Math.random() * (maxMs - minMs));
+  return page.waitForTimeout(ms);
 }
 
 async function ensureLoggedIn(page: Page): Promise<boolean> {
@@ -111,32 +74,139 @@ async function ensureLoggedIn(page: Page): Promise<boolean> {
 }
 
 program
-  .command('refresh')
-  .description('Re-extract cookies from Chrome (run if login expired)')
-  .action(async () => {
-    console.log('Refreshing cookies from Chrome...');
-    if (fs.existsSync(AUTH_FILE)) {
-      fs.unlinkSync(AUTH_FILE);
+  .command('create')
+  .description('Create a new X list')
+  .argument('<listName>', 'Name of the list to create')
+  .option('-d, --description <text>', 'List description')
+  .option('-p, --private', 'Make the list private')
+  .option('--no-headless', 'Run in headed mode (visible browser)')
+  .action(async (listName, options) => {
+    const headless = options.headless !== false;
+    const session = await getContext(headless);
+
+    try {
+      if (!await ensureLoggedIn(session.page)) {
+        console.error('Not logged in. Run: npx tsx scripts/cli.ts check --no-headless and log in');
+        process.exit(1);
+      }
+
+      console.log(`Creating list "${listName}"...`);
+      await session.page.goto('https://x.com/i/lists/create', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await session.page.waitForTimeout(2500);
+
+      await session.page.fill('input[name="name"]', listName);
+      if (options.description) {
+        await session.page.fill('textarea[name="description"]', options.description);
+      }
+      if (options.private) {
+        await session.page.locator('input[type="checkbox"]').first().click();
+      }
+      await session.page.waitForTimeout(400);
+
+      const nextBtn = session.page.getByRole('button', { name: 'Next', exact: true });
+      await nextBtn.click();
+      // After Next, X redirects to /i/lists/<id>/members/suggested -- the
+      // list is created at this point; the ID is captured from the URL.
+      await session.page.waitForURL(/\/i\/lists\/\d+/, { timeout: 20000 });
+
+      const m = session.page.url().match(/\/i\/lists\/(\d+)/);
+      const listId = m ? m[1] : 'unknown';
+      console.log(`✅ Created list "${listName}": https://x.com/i/lists/${listId}`);
+
+      // X then opens "Add to your List" (suggested members) -- the list is
+      // already created; close the flow with Done so the script does not
+      // linger on the member-add form. Best-effort: if Done is missing the
+      // list still exists, so never fail here.
+      try {
+        await session.page.getByRole('button', { name: 'Done', exact: true }).click();
+        await session.page.waitForTimeout(800);
+      } catch {
+        // ignore -- list creation already succeeded
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      process.exit(1);
+    } finally {
+      await closeSession(session);
     }
-    const cookies = await extractChromeCookies();
-    fs.writeFileSync(AUTH_FILE, JSON.stringify({ cookies }, null, 2));
-    console.log('✅ Cookies refreshed and saved to auth.json');
-    console.log(`Total cookies: ${cookies.length}`);
+  });
+
+program
+  .command('delete')
+  .description('Delete an X list')
+  .argument('<listIdOrUrl>', 'List ID or full list URL (e.g. 1234567890 or https://x.com/i/lists/1234567890)')
+  .option('--no-headless', 'Run in headed mode (visible browser)')
+  .action(async (listIdOrUrl, options) => {
+    const headless = options.headless !== false;
+    const session = await getContext(headless);
+
+    try {
+      if (!await ensureLoggedIn(session.page)) {
+        console.error('Not logged in. Run: npx tsx scripts/cli.ts check --no-headless and log in');
+        process.exit(1);
+      }
+
+      // Accept a bare ID or a full URL; normalize to /i/lists/<id>/info
+      const m = String(listIdOrUrl).match(/(\d+)/);
+      if (!m) {
+        console.error(`Could not parse list ID from: ${listIdOrUrl}`);
+        process.exit(1);
+      }
+      const listId = m[1];
+      const infoUrl = `https://x.com/i/lists/${listId}/info`;
+      console.log(`Opening ${infoUrl} ...`);
+      await session.page.goto(infoUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await session.page.waitForTimeout(2500);
+
+      // Click "Edit List" (link in the list header) to open the edit dialog
+      await session.page.getByRole('link', { name: 'Edit List' }).first().click();
+      await session.page.waitForTimeout(2000);
+
+      // In the edit dialog: click "Delete List"
+      await session.page.getByText('Delete List', { exact: true }).first().click();
+      await session.page.waitForTimeout(1500);
+
+      // Confirmation sheet: role="alertdialog" (NOT "dialog") "Delete List?
+      // This can't be undone..." with a Delete button carrying
+      // data-testid="confirmationSheetConfirm". Verified live 2026-08-12
+      // via the observe recorder. The alertdialog element reports a
+      // zero-size rect -- wait on the BUTTON, not the dialog.
+      await session.page.locator('[data-testid="confirmationSheetConfirm"]').click();
+      await session.page.waitForTimeout(2500);
+
+      console.log(`✅ Deleted list ${listId}`);
+    } catch (error) {
+      console.error('Error:', error);
+      process.exit(1);
+    } finally {
+      await closeSession(session);
+    }
+  });
+
+program
+  .command('refresh')
+  .description('Verify the live Chromium CDP connection is up (run Chromium with --remote-debugging-port=9222)')
+  .action(async () => {
+    const session = await getContext(true);
+    await closeSession(session);
+    console.log('CDP connection OK. Chromium is reachable at', CDP_URL);
   });
 
 program
   .command('check')
   .description('Check if logged into X')
-  .action(async () => {
+  .option('--no-headless', 'Run in headed mode (visible browser; use for first-time login)')
+  .action(async (options) => {
+    const headless = options.headless !== false;
     console.log('Checking X login status...');
-    const session = await getContext(true);
+    const session = await getContext(headless);
     
     try {
       const loggedIn = await ensureLoggedIn(session.page);
       if (loggedIn) {
         console.log('✅ Logged into X!');
       } else {
-        console.log('❌ Not logged in. Try: npx tsx cli.ts refresh');
+        console.log('❌ Not logged in. First time: run `npx tsx scripts/cli.ts check --no-headless` and log in.');
       }
     } catch (e) {
         console.error("Check failed:", e);
@@ -164,13 +234,16 @@ program
     
     try {
       if (!await ensureLoggedIn(session.page)) {
-        console.error('Not logged in. Run: npx tsx cli.ts refresh');
+        console.error('Not logged in. Run: npx tsx scripts/cli.ts check --no-headless and log in');
         process.exit(1);
       }
 
       console.log(`Navigating to profile: https://x.com/${targetHandle}`);
       await session.page.goto(`https://x.com/${targetHandle}`, { waitUntil: 'domcontentloaded' });
       
+      // Let the profile render like a human who just typed a URL
+      await humanDelay(session.page, 2000, 4000);
+
       console.log('Waiting for user actions button...');
       try {
         await session.page.waitForSelector('[data-testid="userActions"]', { timeout: 15000 });
@@ -183,15 +256,19 @@ program
 
       console.log('Clicking user actions...');
       await session.page.click('[data-testid="userActions"]');
-      await session.page.waitForTimeout(500);
+      // The dropdown animates in; X's menu can take 1-2s to render.
+      // Wait for the actual item rather than a fixed delay.
+      await humanDelay(session.page, 500, 1000);
       
       console.log('Clicking Add/remove from Lists...');
       try {
-        await session.page.click('[role="menuitem"]:has-text("Add/remove from Lists")', { timeout: 5000 });
+        await session.page.waitForSelector('[role="menuitem"]:has-text("Add/remove from Lists")', { timeout: 8000 });
+        await session.page.click('[role="menuitem"]:has-text("Add/remove from Lists")');
       } catch (e) {
         console.log('Trying fallback selector...');
         try {
-            await session.page.click('[role="menuitem"]:has-text("Lists")', { timeout: 5000 });
+            await session.page.waitForSelector('[role="menuitem"]:has-text("Lists")', { timeout: 8000 });
+            await session.page.click('[role="menuitem"]:has-text("Lists")');
         } catch (e2) {
             console.error('Menu items found:', await session.page.locator('[role="menuitem"]').allInnerTexts());
             const menuItems = await session.page.locator('[role="menuitem"]').all();
@@ -207,6 +284,7 @@ program
       // Use specific selector and ensure it is visible (fixes duplicate dialog issue)
       const dialogSelector = '[role="dialog"]:has(div[role="checkbox"]):visible';
       await session.page.waitForSelector(dialogSelector, { timeout: 10000 });
+      await humanDelay(session.page, 600, 1200);
       
       console.log(`Searching for list: "${listName}"`);
       const listLocator = session.page.locator(`${dialogSelector} div[role="checkbox"]:has-text("${listName}")`);
@@ -221,6 +299,7 @@ program
       if (isChecked) {
         console.log(`✓ @${targetHandle} already in "${listName}".`);
       } else {
+        await humanDelay(session.page, 300, 800);
         await listLocator.click();
         console.log(`✓ Added @${targetHandle} to "${listName}".`);
       }
@@ -229,11 +308,22 @@ program
       const isDisabled = await saveButton.getAttribute('aria-disabled') === 'true';
       
       if (!isDisabled) {
+        await humanDelay(session.page, 500, 1000);
         await saveButton.click();
         console.log('Saved.');
+        // Give the save time to register before moving on
+        await humanDelay(session.page, 1200, 2200);
       } else {
         console.log('No changes needed.');
         await session.page.keyboard.press('Escape');
+      }
+      
+      // Human pause between profiles: the user reads the profile, thinks,
+      // decides. Long random gap -- the single strongest anti-bot signal.
+      const isLast = targetHandle === targetHandles[targetHandles.length - 1];
+      if (!isLast) {
+        console.log(`Pausing between profiles...`);
+        await humanDelay(session.page, 6000, 14000);
       }
 
     } catch (error) {
@@ -259,7 +349,7 @@ program
     
     try {
       if (!await ensureLoggedIn(session.page)) {
-        console.error('Not logged in. Run: npx tsx cli.ts refresh');
+        console.error('Not logged in. Run: npx tsx scripts/cli.ts check --no-headless and log in');
         process.exit(1);
       }
 
@@ -319,7 +409,7 @@ program
 
     try {
       if (!await ensureLoggedIn(session.page)) {
-        console.error('Not logged in. Run: npx tsx cli.ts refresh');
+        console.error('Not logged in. Run: npx tsx scripts/cli.ts check --no-headless and log in');
         process.exit(1);
       }
       

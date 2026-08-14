@@ -27,7 +27,8 @@ describe('cookies', () => {
       expect(result.ct0).toBe('test-ct0');
       expect(mockGetCookies).toHaveBeenCalledWith({
         browser: 'chrome',
-        url: 'https://x.com'
+        url: 'https://x.com',
+        profile: `${process.env.HOME}/.config/x-list-manager/user_data`
       });
     });
 

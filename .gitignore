@@ -14,3 +14,5 @@ test-persistent*.ts
 auth.json
 auth-data/
 auth-data-seeded/
+__pycache__/
+*.pyc
