@@ -2,8 +2,8 @@
 """All-pages observe recorder for CDP-connected Chromium (Playwright).
 
 Follows the user as THEY drive the UI in THEIR OWN tab/window. Injects the
-gold banner + click/input instrumentation into EVERY page in the context
-(and any new page that opens), streams events to a JSONL file.
+gold banner + click/input/keydown instrumentation into EVERY page in the
+context (and any new page that opens), streams events to a JSONL file.
 
 Usage:
   python3 xlm-observe-all.py [--log /tmp/xlm-flow.jsonl]
@@ -24,9 +24,27 @@ INSTRUMENT_JS = """() => {
         return {tag: el.tagName, attrs, text: (el.innerText || '').trim().replace(/\\s+/g,' ').slice(0,60),
                 x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height)};
     };
+    // Block tree of the body contenteditable: every direct child element with
+    // tag, role, data-*, font hints, and text. Answers "typing X makes block Y".
+    const blockTree = () => {
+        const f = document.querySelector('div[role="textbox"][contenteditable="true"]');
+        if (!f) return null;
+        return Array.from(f.children).map(el => {
+            const cs = getComputedStyle(el);
+            const data = {};
+            for (const a of el.attributes || []) {
+                if (a.name.startsWith('data-')) data[a.name] = a.value;
+            }
+            return {tag: el.tagName.toLowerCase(), role: el.getAttribute('role') || '',
+                    aria: el.getAttribute('aria-label') || '',
+                    data, fs: cs.fontSize, fw: cs.fontWeight,
+                    text: (el.innerText || '').trim().replace(/\\s+/g,' ').slice(0,60)};
+        });
+    };
     try { window.__hobs.disconnect(); } catch (e) {}
     if (window.__hclicks) document.removeEventListener('click', window.__hclicks, true);
     if (window.__hinputs) document.removeEventListener('input', window.__hinputs, true);
+    if (window.__hkeys) document.removeEventListener('keydown', window.__hkeys, true);
     let banner = document.getElementById('hermes-obs-banner');
     if (!banner) {
         banner = document.createElement('div');
@@ -39,14 +57,21 @@ INSTRUMENT_JS = """() => {
     window.__hclicks = (e) => {
         const raw = e.target.nodeType === 3 ? e.target.parentElement : e.target;
         const tgt = raw.closest('[role="button"], [role="menuitem"], button, a, td, th, [contenteditable="true"]') || raw;
-        console.log('HERMESOBS:' + JSON.stringify({kind: 'click', target: ident(tgt)}));
+        console.log('HERMESOBS:' + JSON.stringify({kind: 'click', target: ident(tgt), blocks: blockTree()}));
     };
     document.addEventListener('click', window.__hclicks, true);
     window.__hinputs = (e) => {
         console.log('HERMESOBS:' + JSON.stringify({kind: 'input', inputType: e.inputType,
-            target: ident(e.target), val: (e.target.value || e.target.innerText || '').slice(0,40)}));
+            target: ident(e.target), val: (e.target.value || e.target.innerText || '').slice(0,40),
+            blocks: blockTree()}));
     };
     document.addEventListener('input', window.__hinputs, true);
+    window.__hkeys = (e) => {
+        console.log('HERMESOBS:' + JSON.stringify({kind: 'keydown', key: e.key, code: e.code,
+            meta: e.metaKey, alt: e.altKey, shift: e.shiftKey,
+            target: ident(e.target), blocks: blockTree()}));
+    };
+    document.addEventListener('keydown', window.__hkeys, true);
     window.__hobs = new MutationObserver(() => {
         const dlg = document.querySelectorAll('[role="dialog"], [role="alertdialog"]');
         if (dlg.length) {
@@ -55,7 +80,7 @@ INSTRUMENT_JS = """() => {
         }
     });
     window.__hobs.observe(document.body, {subtree: true, childList: true, attributes: true, characterData: true});
-    console.log('HERMESOBS:' + JSON.stringify({kind: 'ready', url: location.href}));
+    console.log('HERMESOBS:' + JSON.stringify({kind: 'ready', url: location.href, blocks: blockTree()}));
 }
 """
 
