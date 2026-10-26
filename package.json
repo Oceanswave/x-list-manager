@@ -23,10 +23,10 @@
   },
   "devDependencies": {
     "@types/node": "^25.2.2",
-    "@vitest/coverage-v8": "^4.0.18",
+    "@vitest/coverage-v8": "^4.1.12",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.12"
   },
   "engines": {
     "node": ">=22.0.0"
